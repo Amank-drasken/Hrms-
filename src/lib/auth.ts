@@ -1,5 +1,6 @@
 import { authAPI } from './api';
 import { autoCheckOut, clearAttendanceSession } from './attendanceAuto';
+import { seedMockData } from './demoData';
 
 export interface LoginResponse {
   message: string;
@@ -8,6 +9,8 @@ export interface LoginResponse {
 
 export const persistAuthSession = (token: string, userData: any, email: string) => {
   console.warn('🔐 persistAuthSession called with token:', token);
+
+  seedMockData();
   
   // Ensure window is defined for client-side only
   if (typeof window === 'undefined') {
