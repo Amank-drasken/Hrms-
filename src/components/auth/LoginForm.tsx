@@ -1,0 +1,213 @@
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { AlertCircle, Loader, Lock, Mail, ChevronRight, ChevronLeft } from 'lucide-react';
+import { loginUser } from '@/lib/auth';
+import { useAuthStore } from '@/lib/store';
+import { autoCheckIn } from '@/lib/attendanceAuto';
+
+const loginSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+});
+
+type LoginFormData = z.infer<typeof loginSchema>;
+
+export interface PortalTheme {
+  role: 'ADMIN' | 'HR' | 'EMPLOYEE';
+  label: string;
+  subtitle: string;
+  iconGradient: string;         // e.g. "from-blue-500 to-purple-500"
+  buttonGradient: string;       // e.g. "from-blue-600 to-purple-600"
+  buttonHoverGradient: string;  // e.g. "from-blue-700 to-purple-700"
+  accentColor: string;          // e.g. "text-blue-400"
+  ringColor: string;            // e.g. "focus:ring-blue-500/20"
+  badgeClass: string;           // e.g. "bg-blue-500/20 text-blue-300 border-blue-500/30"
+  icon: React.ElementType;
+  emailPlaceholder: string;
+}
+
+interface LoginFormProps {
+  theme: PortalTheme;
+}
+
+export default function LoginForm({ theme }: LoginFormProps) {
+  const router = useRouter();
+  const { setToken } = useAuthStore();
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const Icon = theme.icon;
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema),
+  });
+
+  const onSubmit = async (data: LoginFormData) => {
+    try {
+      setError(null);
+      setIsLoading(true);
+
+      // Pass the portal role so mock mode sets the correct role.
+      const response = await loginUser(data.email, data.password, theme.role);
+      setToken(response.access_token);
+
+      const userId = localStorage.getItem('user_id');
+      if (userId) {
+        await autoCheckIn(userId);
+      }
+
+      setTimeout(() => router.push('/dashboard'), 100);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Login failed. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className='min-h-screen bg-gradient-to-br from-background via-blue-900/20 to-background flex items-center justify-center p-4 relative overflow-hidden'>
+      {/* Animated background blobs */}
+      <div className='absolute inset-0 overflow-hidden pointer-events-none'>
+        <div className='absolute top-0 right-0 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse' />
+        <div className='absolute bottom-0 left-0 w-96 h-96 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse' style={{ animationDelay: '2s' }} />
+        <div className='absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-pink-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-pulse' style={{ animationDelay: '1s' }} />
+      </div>
+
+      <div className='relative z-10 w-full max-w-md'>
+        {/* Back to portal selector */}
+        <Link
+          href='/login'
+          className='inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6 group'
+        >
+          <ChevronLeft className='w-4 h-4 group-hover:-translate-x-0.5 transition-transform' />
+          All portals
+        </Link>
+
+        {/* Icon */}
+        <div className='mb-8 text-center'>
+          <div className={`inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br ${theme.iconGradient} shadow-lg mb-4`}>
+            <Icon className='w-8 h-8 text-white' />
+          </div>
+        </div>
+
+        {/* Card */}
+        <div className='bg-card backdrop-blur-xl rounded-2xl border border-border shadow-2xl overflow-hidden'>
+          <div className='p-8 sm:p-10'>
+            {/* Header */}
+            <div className='text-center mb-8'>
+              {/* Role badge */}
+              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border mb-3 ${theme.badgeClass}`}>
+                {theme.role}
+              </span>
+              <h1 className={`text-3xl font-bold bg-gradient-to-r ${theme.iconGradient} bg-clip-text text-transparent mb-1`}>
+                {theme.label}
+              </h1>
+              <p className='text-muted-foreground text-sm'>{theme.subtitle}</p>
+            </div>
+
+            {/* Error */}
+            {error && (
+              <div className='mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-3'>
+                <AlertCircle className='w-5 h-5 text-red-400 mt-0.5 flex-shrink-0' />
+                <p className='text-sm text-red-300'>{error}</p>
+              </div>
+            )}
+
+            {/* Form */}
+            <form onSubmit={handleSubmit(onSubmit)} className='space-y-4'>
+              {/* Email */}
+              <div>
+                <label className={`block text-sm font-semibold text-muted-foreground mb-2 flex items-center gap-2`}>
+                  <Mail className={`w-4 h-4 ${theme.accentColor}`} />
+                  Email Address
+                </label>
+                <Input
+                  type='email'
+                  placeholder={theme.emailPlaceholder}
+                  {...register('email')}
+                  className='w-full bg-card border border-border text-foreground placeholder-muted-foreground rounded-xl px-4 py-3 focus:outline-none focus:border-primary focus:bg-card focus:ring-2 focus:ring-primary/20 transition-all'
+                />
+                {errors.email && (
+                  <p className='mt-2 text-xs text-red-400 flex items-center gap-1'>
+                    <span className='w-1 h-1 bg-red-400 rounded-full' />
+                    {errors.email.message}
+                  </p>
+                )}
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className='block text-sm font-semibold text-muted-foreground mb-2 flex items-center gap-2'>
+                  <Lock className={`w-4 h-4 ${theme.accentColor}`} />
+                  Password
+                </label>
+                <div className='relative'>
+                  <Input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder='••••••••••'
+                    {...register('password')}
+                    className='w-full bg-card border border-border text-foreground placeholder-muted-foreground rounded-xl px-4 py-3 focus:outline-none focus:border-primary focus:bg-card focus:ring-2 focus:ring-primary/20 transition-all'
+                  />
+                  <button
+                    type='button'
+                    onClick={() => setShowPassword(!showPassword)}
+                    className='absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors text-lg'
+                  >
+                    {showPassword ? '👁️' : '👁️‍🗨️'}
+                  </button>
+                </div>
+                {errors.password && (
+                  <p className='mt-2 text-xs text-red-400 flex items-center gap-1'>
+                    <span className='w-1 h-1 bg-red-400 rounded-full' />
+                    {errors.password.message}
+                  </p>
+                )}
+              </div>
+
+              {/* Submit */}
+              <Button
+                type='submit'
+                disabled={isLoading}
+                className={`w-full mt-6 bg-gradient-to-r ${theme.buttonGradient} hover:${theme.buttonHoverGradient} text-white font-semibold py-3 rounded-xl transition-all duration-200 transform hover:scale-105 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2`}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader className='w-4 h-4 animate-spin' />
+                    Signing in...
+                  </>
+                ) : (
+                  <>
+                    Sign In
+                    <ChevronRight className='w-4 h-4' />
+                  </>
+                )}
+              </Button>
+            </form>
+
+            <div className='mt-8 pt-8 border-t border-border'>
+              <p className='text-center text-xs text-muted-foreground'>
+                By signing in, you agree to our Terms of Service
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className='mt-6 text-center text-xs text-muted-foreground'>
+          Need help? Contact your administrator
+        </div>
+      </div>
+    </div>
+  );
+}
